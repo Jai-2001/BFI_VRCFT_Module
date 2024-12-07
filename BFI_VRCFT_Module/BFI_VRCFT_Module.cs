@@ -1,6 +1,7 @@
 ﻿namespace BFI_VRCFT_Module
 {
     using Microsoft.Extensions.Logging;
+    using System.Collections;
     using System.IO;
     using System.Linq.Expressions;
     using System.Net;
@@ -16,27 +17,14 @@
     {
         //tags with which each expression is associated
         private static string tagEyeClosed = "eyeclosed";
-        private static string tagSmile = "smile";
-        private static string tagFrown = "frown";
-        private static string tagAnger = "anger";
-        private static string tagCringe = "cringe";
-        private static string tagCheekPuff = "cheekpuff";
-        private static string tagApeShape = "apeshape";
 
-        //osc info
+                //osc info
         public static bool debug = false;
         OscReceiver reciever;
 
-        //expressions
-        UnifiedExpressionShape frown = new UnifiedExpressionShape();
-        UnifiedExpressionShape mouthUpperUp = new UnifiedExpressionShape();
-        UnifiedExpressionShape mouthLowerDown = new UnifiedExpressionShape();
-        UnifiedExpressionShape MouthStretch = new UnifiedExpressionShape();
-        UnifiedExpressionShape browDown = new UnifiedExpressionShape();
-        UnifiedExpressionShape cheekPuff = new UnifiedExpressionShape();
-        UnifiedExpressionShape apeShape = new UnifiedExpressionShape();
-        UnifiedExpressionShape browInnerUp = new UnifiedExpressionShape();
-        UnifiedExpressionShape browOuterUp = new UnifiedExpressionShape();
+        // Expression mapping
+        private Dictionary<string, UnifiedExpressionShape> expressionShapes;
+
 
 
         // What your interface is able to send as tracking data.
@@ -48,6 +36,7 @@
         public override (bool eyeSuccess, bool expressionSuccess) Initialize(bool eyeAvailable, bool expressionAvailable)
         {
 
+            Logger.LogInformation("jZUS_ fork");
             JsonParser parser = new JsonParser();
             Config config = new Config();
             try
@@ -83,22 +72,22 @@
             {
                 SupportedExpressions expressions = parser.ParseExpressions();  //parsing json file
                 reciever.expressions = expressions;                     //assigning expressions to the reciever
-                
-                if (expressions != null && expressions.Expressions != null)
+
+                expressionShapes = new Dictionary<string, UnifiedExpressionShape>();
+
+                if (expressions?.Expressions != null)
                 {
-                    if (expressions.Expressions != null)
-                    {
                         foreach (var expression in expressions.Expressions)
                         {
-                            Logger.LogInformation($"Expression: {expression.Key}, Id: {expression.Value.Id}, Weight: {expression.Value.ConfigWeight}");//printting supported expressions to console.
+                        expressionShapes.Add(expression.Key, new UnifiedExpressionShape());
+                        Logger.LogInformation($"Expression: {expression.Key}, Id: {expression.Value.Id}, Weight: {expression.Value.ConfigWeight}");//printting supported expressions to console.
                         }
-                    }
                 }
                 else
                 {
                     Logger.LogInformation($"No expressions found in the JSON file");
                 }
-                
+
             }
             catch (Exception ex)
             {
@@ -124,8 +113,15 @@
 
                 if (debug) Logger.LogInformation(reciever.debugString);
 
-                //UpdateValues();
-                UpdateValuesExpressions();
+                try
+                {
+                    //UpdateValues();
+                    UpdateValuesExpressions();
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogInformation($"Update error: {ex.Message}");
+                }
 
                 if (reciever.EvaluateTimout())//checkerboard eyes if we didn't recieve any data for a while
                 {
@@ -155,32 +151,7 @@
                     }
                 }
 
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthFrownRight] = frown;
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthFrownLeft] = frown;
-
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthUpperUpLeft] = mouthUpperUp;
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthUpperUpRight] = mouthUpperUp;
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthLowerDownLeft] = mouthLowerDown;
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthLowerDownRight] = mouthLowerDown;
-
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.BrowLowererLeft] = browDown;
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.BrowLowererRight] = browDown;
-
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthStretchLeft] = MouthStretch;
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthStretchRight] = MouthStretch;
-
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.CheekPuffRight] = cheekPuff;
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.CheekPuffLeft] = cheekPuff;
-
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.JawOpen] = apeShape;
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthClosed] = apeShape;
-
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.BrowInnerUpLeft] = browInnerUp;
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.BrowInnerUpRight] = browInnerUp;
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.BrowOuterUpLeft] = browOuterUp;
-                UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.BrowOuterUpRight] = browOuterUp;
-
-
+                Logger.LogInformation($"Shapes Loop");
 
             }
 
@@ -192,71 +163,48 @@
         {
             try
             {
-
-                if (reciever.expressions.Expressions.ContainsKey(tagSmile))
+                Logger.LogInformation($"Update Loop");
+                foreach (var expression in reciever.expressions.Expressions)
                 {
-                    frown.Weight = Clampf01((-reciever.expressions.Expressions[tagSmile].Weight));
-                    mouthUpperUp.Weight = Clampf01(reciever.expressions.Expressions[tagSmile].Weight);
-                    mouthLowerDown.Weight = Clampf01(reciever.expressions.Expressions[tagSmile].Weight);
-                }
-                if (reciever.expressions.Expressions.ContainsKey(tagFrown))
-                {
-                    if (reciever.expressions.Expressions.ContainsKey(tagSmile))
+                    if (expressionShapes.ContainsKey(expression.Key))
                     {
-                        frown.Weight = ClampfMinus11((-reciever.expressions.Expressions[tagSmile].Weight) + reciever.expressions.Expressions[tagFrown].Weight);
-                    }
-                    else
-                    {
-                        frown.Weight = Clampf01(reciever.expressions.Expressions[tagFrown].Weight);
+                        UnifiedExpressionShape s = expressionShapes[expression.Key];
+                        s.Weight = Clampf01(expression.Value.Weight);
                     }
                 }
-                if (reciever.expressions.Expressions.ContainsKey(tagCringe))
-                {
-                    if (reciever.expressions.Expressions.ContainsKey(tagSmile))
-                    {
-                        mouthLowerDown.Weight = Clampf01(reciever.expressions.Expressions[tagSmile].Weight + reciever.expressions.Expressions[tagCringe].Weight);
-                    }
-                    else
-                    {
-                        mouthLowerDown.Weight = Clampf01(reciever.expressions.Expressions[tagCringe].Weight);
-                    }
 
-                    if (!reciever.expressions.Expressions.ContainsKey(tagApeShape))
-                    {
-                        browInnerUp.Weight = Clampf01(reciever.expressions.Expressions[tagCringe].Weight);
-                    }
-
-                    MouthStretch.Weight = Clampf01(reciever.expressions.Expressions[tagCringe].Weight);
-
-                }
-                if (reciever.expressions.Expressions.ContainsKey(tagAnger))
-                {
-                    browDown.Weight = Clampf01(reciever.expressions.Expressions[tagAnger].Weight);
-                }
-                if (reciever.expressions.Expressions.ContainsKey(tagCheekPuff))
-                {
-                    cheekPuff.Weight = Clampf01(reciever.expressions.Expressions[tagCheekPuff].Weight);
-                }
-                if (reciever.expressions.Expressions.ContainsKey(tagApeShape))
-                {
-                    apeShape.Weight = Clampf01(reciever.expressions.Expressions[tagApeShape].Weight);
-
-                    if (reciever.expressions.Expressions.ContainsKey(tagCringe))
-                    {
-                        browInnerUp.Weight = Clampf01(reciever.expressions.Expressions[tagCringe].Weight + reciever.expressions.Expressions[tagApeShape].Weight);
-
-                    }
-                    else
-                    {
-                        browInnerUp.Weight = Clampf01(reciever.expressions.Expressions[tagApeShape].Weight);
-                    }
-                    browOuterUp.Weight = Clampf01(reciever.expressions.Expressions[tagApeShape].Weight);
-                }
-
+                // Handle interactions if necessary (based on the expressions' config)
+                HandleExpressionInteractions();
+            
             }
             catch (Exception ex)
             {
                 Logger.LogInformation($"Error trying to acces values: {ex.Message}");
+            }
+        }
+
+        // Handle interactions between expressions dynamically
+        private void HandleExpressionInteractions()
+        {
+            Logger.LogInformation($"Handle Loop");
+            // Example: Implement interaction logic based on your config.json structure
+            foreach (var expression in reciever.expressions.Expressions)
+            {
+                var interactions = expression.Value.Interactions; // Assuming interactions are part of the expression config
+                if (interactions != null)
+                {
+                    foreach (var interaction in interactions)
+                    {
+                        string interactingExpression = interaction.Key;
+                        float interactionValue = interaction.Value;
+                        Logger.LogInformation($"Handle Loop ({expression.Key}) - {interactingExpression}:{interactionValue}");
+                        if (expressionShapes.ContainsKey(interactingExpression))
+                        {
+                            UnifiedExpressionShape s = expressionShapes[interactingExpression];
+                            s.Weight = Clampf01(s.Weight + interactionValue);
+                        }
+                    }
+                }
             }
         }
 
@@ -269,44 +217,19 @@
             UnifiedTracking.Data.Eye.Left.Gaze = new Vector2(0, 0);
             UnifiedTracking.Data.Eye.Right.Gaze = new Vector2(0, 0);
 
-            frown.Weight = 0;
-            mouthUpperUp.Weight = 0;
-            mouthLowerDown.Weight = 0;
-            browDown.Weight = 0;
-            MouthStretch.Weight = 0;
-            cheekPuff.Weight = 0;
-            apeShape.Weight = 0;
-            browInnerUp.Weight = 0 ;
-            browOuterUp.Weight = 0;
-
+            foreach (var shape in expressionShapes)
+            {
+                UnifiedExpressionShape s = shape.Value;
+                s.Weight = 0;
+            }
 
             UnifiedTracking.Data.Eye.Left.Openness = 1;
             UnifiedTracking.Data.Eye.Right.Openness = 1;
 
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthFrownRight] = frown;
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthFrownLeft] = frown;
-
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthUpperUpLeft] = mouthUpperUp;
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthUpperUpRight] = mouthUpperUp;
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthLowerDownLeft] = mouthLowerDown;
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthLowerDownRight] = mouthLowerDown;
-
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.BrowLowererLeft] = browDown;
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.BrowLowererRight] = browDown;
-
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthStretchLeft] = MouthStretch;
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthStretchRight] = MouthStretch;
-
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.CheekPuffRight] = cheekPuff;
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.CheekPuffLeft] = cheekPuff;
-
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.JawOpen] = apeShape;
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.MouthClosed] = apeShape;
-
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.BrowInnerUpLeft] = browInnerUp;
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.BrowInnerUpRight] = browInnerUp;
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.BrowOuterUpLeft] = browOuterUp;
-            UnifiedTracking.Data.Shapes[(int)UnifiedExpressions.BrowOuterUpRight] = browOuterUp;
+            foreach (var shape in expressionShapes)
+            {
+                UnifiedTracking.Data.Shapes[(int)Enum.Parse(typeof(UnifiedExpressions), shape.Key)] = shape.Value;
+            }
 
         }
 

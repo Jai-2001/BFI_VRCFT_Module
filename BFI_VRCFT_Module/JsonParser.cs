@@ -20,8 +20,11 @@ namespace BFI_VRCFT_Module
         private float weight = 0;
         public float Weight { 
             get { return weight * ConfigWeight; }
-            set { weight = value; } 
+            set { weight = value; }
         }
+
+        [JsonPropertyName("interactions")]
+        public Dictionary<string, float> Interactions { get; set; } = new Dictionary<string, float>();
     }
 
     public class Config
@@ -44,7 +47,7 @@ namespace BFI_VRCFT_Module
     public class SupportedExpressions
     {
         [JsonPropertyName("supportedexpressions")]
-        public Dictionary<string, Expression> Expressions { get; set; }
+        public Dictionary<string, Expression> Expressions { get; set; } = new Dictionary<string, Expression>();
     }
 
     public class JsonParser
@@ -60,12 +63,16 @@ namespace BFI_VRCFT_Module
             string jsonFilePath = Path.Combine(System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location), JsonFileName);
             if (!File.Exists(jsonFilePath))
             {
-                //throw new FileNotFoundException($"The file {JsonFileName} was not found.");
                 debugString = ($"The file {JsonFileName} was not found.");
+                //throw new FileNotFoundException($"The file {JsonFileName} was not found.");
             }
 
             string jsonString = File.ReadAllText(jsonFilePath);
             SupportedExpressions supportedExpressions = JsonSerializer.Deserialize<SupportedExpressions>(jsonString);//gotrough the json and deserialize it into the object
+            if (supportedExpressions?.Expressions == null || supportedExpressions.Expressions.Count == 0)
+            {
+                debugString = "No expressions found in the JSON file.";
+            }
             return supportedExpressions;
         }
 
@@ -80,7 +87,14 @@ namespace BFI_VRCFT_Module
 
             string jsonString = File.ReadAllText(jsonFilePath);
             Config config = JsonSerializer.Deserialize<Config>(jsonString);//gotrough the json and deserialize it into the object
-            debugString = $"config: ip={config.ip}, port={config.port}, timout={config.timoutTime}";
+            if (config == null)
+            {
+                debugString = "No config data found in the JSON file.";
+            }
+            else
+            {
+                debugString = $"config: ip={config.ip}, port={config.port}, timout={config.timoutTime}";
+            }
             return config;
         }
     }
