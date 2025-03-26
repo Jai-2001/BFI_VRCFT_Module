@@ -15,8 +15,6 @@
 
     public class BFI_VRCFT_Module : ExtTrackingModule
     {
-        //tags with which each expression is associated
-        private static string tagEyeClosed = "eyeclosed";
 
                 //osc info
         public static bool debug = false;
@@ -135,13 +133,12 @@
                 {
                     UnifiedTracking.Data.Eye.Left.Gaze = new Vector2(0, 0);
                     UnifiedTracking.Data.Eye.Right.Gaze = new Vector2(0, 0);
-
-                    if (reciever.expressions.Expressions.ContainsKey(tagEyeClosed))//assinign eyeclosed weights if the expression is present
+                    
+                    if (reciever.expressions.Expressions.TryGetValue("eyeclosed", out var eyeClosedExpr))//assigning eyeclosed weights if the expression is present
                     {
-
-                        UnifiedTracking.Data.Eye.Left.Openness = 1 - reciever.expressions.Expressions[tagEyeClosed].Weight;
-                        UnifiedTracking.Data.Eye.Right.Openness = 1 - reciever.expressions.Expressions[tagEyeClosed].Weight;
-
+                        float openness = 1 - eyeClosedExpr.Weight;
+                        UnifiedTracking.Data.Eye.Left.Openness = openness;
+                        UnifiedTracking.Data.Eye.Right.Openness = openness;
                     }
                     else
                     {
@@ -150,8 +147,6 @@
                         UnifiedTracking.Data.Eye.Right.Openness = 1f;
                     }
                 }
-
-                Logger.LogInformation($"Shapes Loop");
 
             }
 
@@ -163,50 +158,71 @@
         {
             try
             {
-                Logger.LogInformation($"Update Loop");
-                foreach (var expression in reciever.expressions.Expressions)
+                var expressions = reciever.expressions.Expressions;
+
+                // Process expressions in ID order to maintain interaction hierarchy
+                var orderedExpressions = expressions
+                    .OrderBy(e => e.Value.Id)
+                    .ToList();
+
+                // First pass: Apply base weights
+                foreach (var entry in orderedExpressions)
                 {
-                    if (expressionShapes.ContainsKey(expression.Key))
+                    var expressionKey = entry.Key;
+                    var expression = entry.Value;
+
+                    if (expressionShapes.TryGetValue(expressionKey, out var shape))
                     {
-                        UnifiedExpressionShape s = expressionShapes[expression.Key];
-                        s.Weight = Clampf01(expression.Value.Weight);
+                        // Apply base weight with proper range clamping
+                        shape.Weight = ClampToRange(expression.Weight, expression);
+
+                        // Apply shape to UnifiedExpression targets
+                        foreach (var targetName in expression.Targets)
+                        {
+                            if (Enum.TryParse<UnifiedExpressions>(targetName, out var target))
+                            {
+                                UnifiedTracking.Data.Shapes[(int)target] = shape;
+                            }
+                        }
                     }
                 }
 
-                // Handle interactions if necessary (based on the expressions' config)
-                HandleExpressionInteractions();
-            
-            }
-            catch (Exception ex)
-            {
-                Logger.LogInformation($"Error trying to acces values: {ex.Message}");
-            }
-        }
-
-        // Handle interactions between expressions dynamically
-        private void HandleExpressionInteractions()
-        {
-            Logger.LogInformation($"Handle Loop");
-            // Example: Implement interaction logic based on your config.json structure
-            foreach (var expression in reciever.expressions.Expressions)
-            {
-                var interactions = expression.Value.Interactions; // Assuming interactions are part of the expression config
-                if (interactions != null)
+                // Second pass: Apply interactions
+                foreach (var entry in orderedExpressions)
                 {
-                    foreach (var interaction in interactions)
+                    var expressionKey = entry.Key;
+                    var expression = entry.Value;
+
+                    if (expression.Interactions != null && expressionShapes.TryGetValue(expressionKey, out var shape))
                     {
-                        string interactingExpression = interaction.Key;
-                        float interactionValue = interaction.Value;
-                        Logger.LogInformation($"Handle Loop ({expression.Key}) - {interactingExpression}:{interactionValue}");
-                        if (expressionShapes.ContainsKey(interactingExpression))
+                        foreach (var interaction in expression.Interactions)
                         {
-                            UnifiedExpressionShape s = expressionShapes[interactingExpression];
-                            s.Weight = Clampf01(s.Weight + interactionValue);
+                            var targetKey = interaction.Key;
+                            if (!expressions.TryGetValue(targetKey, out var targetExpression))
+                                continue;
+
+                            // Only apply to higher IDs to maintain order
+                            if (targetExpression.Id <= expression.Id)
+                                continue;
+
+                            if (expressionShapes.TryGetValue(targetKey, out var targetShape))
+                            {
+                                float interactionValue = interaction.Value;
+                                targetShape.Weight = ClampToRange(
+                                    targetShape.Weight + (shape.Weight * interactionValue),
+                                    targetExpression
+                                );
+                            }
                         }
                     }
                 }
             }
+            catch (Exception ex)
+            {
+                Logger.LogInformation($"Error updating expressions: {ex.Message}");
+            }
         }
+
 
         // Called when the module is unloaded or VRCFaceTracking itself tears down.
         public override void Teardown()
@@ -226,9 +242,18 @@
             UnifiedTracking.Data.Eye.Left.Openness = 1;
             UnifiedTracking.Data.Eye.Right.Openness = 1;
 
-            foreach (var shape in expressionShapes)
+            if (reciever.expressions?.Expressions != null)
             {
-                UnifiedTracking.Data.Shapes[(int)Enum.Parse(typeof(UnifiedExpressions), shape.Key)] = shape.Value;
+                foreach (var entry in reciever.expressions.Expressions)
+                {
+                    foreach (var targetName in entry.Value.Targets)
+                    {
+                        if (Enum.TryParse<UnifiedExpressions>(targetName, out var target))
+                        {
+                            UnifiedTracking.Data.Shapes[(int)target] = new UnifiedExpressionShape();
+                        }
+                    }
+                }
             }
 
         }
@@ -238,14 +263,17 @@
             return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
         }
 
-        private float Clampf01(float value)//clamps value between 0 and 1
+        private float Clamp(float value, float min, float max)
         {
-            return Math.Clamp(value, 0, 1);
+            return Math.Min(Math.Max(value, min), max);
         }
 
-        private float ClampfMinus11(float value)//clamps value between 0 and 1
+        private float ClampToRange(float value, Expression expression)
         {
-            return Math.Clamp(value, -1, 1);
+            if (expression.Range == null || expression.Range.Length != 2)
+                return Clamp(value, 0, 1);
+
+            return Clamp(value, expression.Range[0], expression.Range[1]);
         }
 
     }

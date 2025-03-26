@@ -23,6 +23,12 @@ namespace BFI_VRCFT_Module
             set { weight = value; }
         }
 
+        [JsonPropertyName("range")]
+        public float[] Range { get; set; } = new float[] { 0, 1 };
+
+        [JsonPropertyName("targets")]
+        public string[] Targets { get; set; } = Array.Empty<string>();
+
         [JsonPropertyName("interactions")]
         public Dictionary<string, float> Interactions { get; set; } = new Dictionary<string, float>();
     }
@@ -46,7 +52,7 @@ namespace BFI_VRCFT_Module
 
     public class SupportedExpressions
     {
-        [JsonPropertyName("supportedexpressions")]
+        [JsonPropertyName("expressions")]
         public Dictionary<string, Expression> Expressions { get; set; } = new Dictionary<string, Expression>();
     }
 

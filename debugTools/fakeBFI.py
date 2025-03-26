@@ -28,7 +28,7 @@ class OSCSliderApp:
             ttk.Entry(frame, textvariable=self.osc_paths[i]).pack(side=tk.LEFT)
 
             # Slider
-            slider = tk.Scale(frame, from_=0, to=1, resolution=0.01, orient=tk.HORIZONTAL, command=lambda val, idx=i: self.send_osc_message(idx, val))
+            slider = tk.Scale(frame, from_=-1, to=1, resolution=0.01, orient=tk.HORIZONTAL, command=lambda val, idx=i: self.send_osc_message(idx, val))
             slider.pack(fill=tk.X, padx=10, pady=5)
             self.sliders.append(slider)
 
