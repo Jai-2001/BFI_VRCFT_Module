@@ -33,8 +33,6 @@
         // VRCFaceTracking know what data is available to be sent from your tracking interface at initialization.
         public override (bool eyeSuccess, bool expressionSuccess) Initialize(bool eyeAvailable, bool expressionAvailable)
         {
-
-            Logger.LogInformation("jZUS_ fork");
             JsonParser parser = new JsonParser();
             Config config = new Config();
             try
